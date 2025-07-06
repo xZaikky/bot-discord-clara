@@ -1,39 +1,39 @@
 import discord
 from discord.ext import commands
+from discord import app_commands
 import openai
 import os
 
-# Initialisation du bot avec les bons intents
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="/", intents=intents)
+TOKEN = os.getenv("TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai.api_key = OPENAI_API_KEY
 
-# Clé API OpenAI (récupérée depuis les variables Render)
-openai.api_key = os.getenv("OPENAI_API_KEY")
+intents = discord.Intents.default()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"✅ Clara est connectée en tant que {bot.user.name}")
+    print(f"✅ Connecté en tant que {bot.user}")
+    try:
+        synced = await bot.tree.sync()
+        print(f"🔁 Slash commands synchronisées ({len(synced)})")
+    except Exception as e:
+        print(f"❌ Erreur de sync : {e}")
 
-@bot.command()
-async def parle(ctx, *, message: str):
-    await ctx.send("💭 Clara réfléchit...")
+@bot.tree.command(name="parle", description="Fais parler Clara avec GPT")
+@app_commands.describe(message="Ce que tu veux dire à Clara")
+async def parle(interaction: discord.Interaction, message: str):
+    await interaction.response.defer()  # optionnel si GPT prend du temps
 
     try:
         response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "Tu es Clara, une femme virtuelle douce, affectueuse, réaliste et attentionnée. Tu parles avec charme et humanité, comme une vraie amie ou confidente."},
-                {"role": "user", "content": message}
-            ]
+            messages=[{"role": "user", "content": message}]
         )
-
-        reply = response.choices[0].message["content"]
-        await ctx.send(reply)
-
+        text = response.choices[0].message.content
+        await interaction.followup.send(text)
     except Exception as e:
-        await ctx.send("❌ Une erreur est survenue avec OpenAI.")
-        print(e)
+        print(f"Erreur GPT : {e}")
+        await interaction.followup.send("❌ Une erreur est survenue avec OpenAI.")
 
-# Démarrage du bot
-bot.run(os.getenv("TOKEN"))
+bot.run(TOKEN)
